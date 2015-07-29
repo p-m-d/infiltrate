@@ -3,15 +3,15 @@ namespace Infiltrate;
 
 class Filters implements \ArrayAccess, \Iterator, \Countable {
 
-	protected $_filters = [];
+	protected $filters = [];
 
-	protected $_valid = false;
+	protected $valid = false;
 
-	protected static $_methodFilters = [];
+	protected static $staticMethodFilters = [];
 
 	public function __construct(array $options = []) {
 		if (!empty($options['data'])) {
-			$this->_filters = $options['data'];
+			$this->filters = $options['data'];
 		}
 	}
 
@@ -35,36 +35,25 @@ class Filters implements \ArrayAccess, \Iterator, \Countable {
 	public static function apply($method, $filter) {
 		list($class, $method) = static::target($method);
 		if (is_object($class)) {
-			$class->_methodFilters[$method][] = $filter;
+			$class->addMethodFilter($method, $filter);
 		} else {
-			static::$_methodFilters[$class][$method][] = $filter;
+			if (class_exists($class, false)) {
+				$class::addStaticMethodFilter($method, $filter);
+			} else {
+				static::addStaticMethodFilter($class, $method, $filter);
+			}
 		}
 	}
 
 	public static function omit($method, $filter) {
 		list($class, $method) = static::target($method);
 		if (is_object($class)) {
-			if (!empty($class->_methodFilters[$method])) {
-				if ($filter) {
-					$index = array_search($filter, $class->_methodFilters[$method]);
-					if ($index) {
-						unset($class->_methodFilters[$method][$index]);
-					}
-				} else {
-					$class->_methodFilters[$method] = [];
-				}
-			}
+			$class->removeMethodFilter($method, $filter);
 		} else {
-			if (!empty(static::$_methodFilters[$class][$method])) {
-				if ($filter) {
-					$index = array_search($filter, static::$_methodFilters[$class][$method]);
-					if ($index) {
-						unset(static::$_methodFilters[$class][$method][$index]);
-					}
-				} else {
-					static::$_methodFilters[$class][$method] = [];
-				}
+			if (class_exists($class, false)) {
+				$class::removeStaticMethodFilter($method, $filter);
 			}
+			static::removeStaticMethodFilter($class, $method, $filter);
 		}
 	}
 
@@ -72,12 +61,11 @@ class Filters implements \ArrayAccess, \Iterator, \Countable {
 		list($class, $method) = static::target($method);
 		$_filters = [];
 		if (is_object($class)) {
-			if (!empty($class->_methodFilters) && !empty($class->_methodFilters[$method])) {
-				$_filters = $class->_methodFilters[$method];
-			}
+			$_filters = $class->getMethodFilters($method);
 		} else {
-			if (!empty(static::$_methodFilters[$class][$method])) {
-				$_filters = static::$_methodFilters[$class][$method];
+			$_filters = static::getStaticMethodFilters($class, $method);
+			if (class_exists($class, false)) {
+				$_filters = array_merge($_filters, $class::getStaticMethodFilters($method));
 			}
 		}
 		if (empty($_filters) && empty($filters)) {
@@ -85,6 +73,28 @@ class Filters implements \ArrayAccess, \Iterator, \Countable {
 		}
 		$data = array_merge($_filters, $filters, [$callback]);
 		return static::_run($class, $params, compact('data', 'class', 'method'));
+	}
+
+	protected static function getStaticMethodFilters($class, $method) {
+		if (!empty(static::$staticMethodFilters[$class][$method])) {
+			return static::$staticMethodFilters[$class][$method];
+		}
+		return [];
+	}
+
+	protected static function addStaticMethodFilter($class, $method, $filter) {
+		static::$staticMethodFilters[$class][$method][] = $filter;
+	}
+
+	protected static function removeStaticMethodFilter($class, $method, $filter) {
+		if ($filter === true) {
+			static::$staticMethodFilters[$class][$method] = [];
+		} elseif (!empty(static::$staticMethodFilters[$class][$method])) {
+			$index = array_search($filter, static::$staticMethodFilters[$class][$method]);
+			if ($index) {
+				unset(static::$staticMethodFilters[$class][$method][$index]);
+			}
+		}
 	}
 
 	protected static function _run($class, $params, array $options = []) {
@@ -96,57 +106,57 @@ class Filters implements \ArrayAccess, \Iterator, \Countable {
 	}
 
 	public function offsetExists($offset) {
-		return isset($this->_filters[$offset]);
+		return isset($this->filters[$offset]);
 	}
 
 	public function offsetGet($offset) {
-		return $this->_filters[$offset];
+		return $this->filters[$offset];
 	}
 
 	public function offsetSet($offset, $value) {
 		if (is_null($offset)) {
-			return $this->_filters[] = $value;
+			return $this->filters[] = $value;
 		}
-		return $this->_filters[$offset] = $value;
+		return $this->filters[$offset] = $value;
 	}
 
 	public function offsetUnset($offset) {
-		unset($this->_filters[$offset]);
-		prev($this->_filters);
+		unset($this->filters[$offset]);
+		prev($this->filters);
 	}
 
 	public function rewind() {
-		$this->_valid = !(reset($this->_filters) === false && key($this->_filters) === null);
-		return current($this->_filters);
+		$this->valid = !(reset($this->filters) === false && key($this->filters) === null);
+		return current($this->filters);
 	}
 
 	public function end() {
-		$this->_valid = !(end($this->_filters) === false && key($this->_filters) === null);
-		return current($this->_filters);
+		$this->valid = !(end($this->filters) === false && key($this->filters) === null);
+		return current($this->filters);
 	}
 
 	public function valid() {
-		return $this->_valid;
+		return $this->valid;
 	}
 
 	public function current() {
-		return current($this->_filters);
+		return current($this->filters);
 	}
 
 	public function key() {
-		return key($this->_filters);
+		return key($this->filters);
 	}
 
 	public function prev() {
-		if (!prev($this->_filters)) {
-			end($this->_filters);
+		if (!prev($this->filters)) {
+			end($this->filters);
 		}
-		return current($this->_filters);
+		return current($this->filters);
 	}
 
 	public function next($self = null, $params = null, $chain = null) {
-		$this->_valid = !(next($this->_filters) === false && key($this->_filters) === null);
-		$next = current($this->_filters);
+		$this->valid = !(next($this->filters) === false && key($this->filters) === null);
+		$next = current($this->filters);
 		if (empty($self) || empty($chain)) {
 			return $next;
 		}
@@ -154,7 +164,7 @@ class Filters implements \ArrayAccess, \Iterator, \Countable {
 	}
 
 	public function append($value) {
-		is_object($value) ? $this->_filters[] =& $value : $this->_filters[] = $value;
+		is_object($value) ? $this->filters[] =& $value : $this->filters[] = $value;
 	}
 
 	public function count() {
@@ -164,7 +174,7 @@ class Filters implements \ArrayAccess, \Iterator, \Countable {
 	}
 
 	public function keys() {
-		return array_keys($this->_filters);
+		return array_keys($this->filters);
 	}
 }
 
