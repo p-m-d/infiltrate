@@ -29,8 +29,7 @@ trait FilterableInstanceTrait {
 	}
 
 	protected function filterMethod($method, $params, $callback, $filters = array()) {
-		$method = Filters::target($method, $this);
-		return Filters::run($method, $params, $callback, $filters);
+		return Filters::filter($this, $method, $params, $callback, $filters);
 	}
 
 	/**

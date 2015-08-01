@@ -26,11 +26,11 @@ trait FilterableStaticTrait {
 				unset(static::$staticMethodFilters[$method][$index]);
 			}
 		}
+		Filters::removeStaticMethodFilter(get_called_class(), $method, $filter);
 	}
 
 	protected static function filterStaticMethod($method, $params, $callback, $filters = array()) {
-		$method = Filters::target($method, get_called_class());
-		return Filters::run($method, $params, $callback, $filters);
+		return Filters::filter(get_called_class(), $method, $params, $callback, $filters);
 	}
 
 	/**
