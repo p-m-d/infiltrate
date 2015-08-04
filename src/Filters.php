@@ -9,7 +9,7 @@ class Filters {
 		if (is_object($class)) {
 			$class->addMethodFilter($method, $filter);
 		} else {
-			if (class_exists($class, false)) {
+			if (class_exists($class, false) && static::usesStaticTrait($class)) {
 				$class::addStaticMethodFilter($method, $filter);
 			} else {
 				static::addStaticMethodFilter($class, $method, $filter);
@@ -21,7 +21,7 @@ class Filters {
 		if (is_object($class)) {
 			$class->removeMethodFilter($method, $filter);
 		} else {
-			if (class_exists($class, false)) {
+			if (class_exists($class, false) && static::usesStaticTrait($class)) {
 				$class::removeStaticMethodFilter($method, $filter);
 			}
 			static::removeStaticMethodFilter($class, $method, $filter);
@@ -79,6 +79,10 @@ class Filters {
 		$chain = new FilterCollection($options);
 		$next = $chain->rewind();
 		return call_user_func($next, $class, $params, $chain);
+	}
+
+	protected static function usesStaticTrait($class) {
+		return in_array('Infiltrate\FilterableStaticTrait', class_uses($class));
 	}
 
 	/**
